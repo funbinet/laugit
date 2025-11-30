@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-RED="\e[31m"; GREEN="\e[32m"; YELLOW="\e[33m"; CYAN="\e[36m"; BLUE="\e[34m"; MAGENTA="\e[35m"; RESET="\e[0m"
+RED="\x1b[31m"; GREEN="\x1b[32m"; YELLOW="\x1b[33m"; CYAN="\x1b[36m"; BLUE="\x1b[34m"; MAGENTA="\x1b[35m"; RESET="\x1b[0m"
 
 TOOLNAME="laugit"
 CONFIG_DIR="$PWD/.config/laugit"
@@ -23,17 +23,17 @@ pause() {
     fi
 }
 banner() {
-        local NOW
-        NOW=$(get_timestamp)
-        printf "${RED}  ╔═════════════════════════╗${RESET}"
-        printf "\n${RED}  ║${RESET}${GREEN}       L Λ U G I T       ${RESET}${RED}║${RESET}"
-        printf "\n${RED}  ║  Git Terminal Automata  ║${RESET}"
-        printf "\n${RED}  ║     Author: ${RESET}${GREEN}Funbin💀${RESET}${RED}    ║${RESET}"
-        printf "\n${RED}  ╚═════════════════════════╝${RESET}"
-        printf "\n${RED}  [%s]:[EAT]${RESET}\n\n" "$NOW"
+    local NOW
+    NOW=$(get_timestamp)
+    printf "${RED}  ╔═════════════════════════╗${RESET}"
+    printf "\n${RED}  ║${RESET}${GREEN}       L Λ U G I T       ${RESET}${RED}║${RESET}"
+    printf "\n${RED}  ║  Git Terminal Automata  ║${RESET}"
+    printf "\n${RED}  ║     Author: ${RESET}${GREEN}Funbin💀${RESET}${RED}    ║${RESET}"
+    printf "\n${RED}  ╚═════════════════════════╝${RESET}"
+    
+    printf "\n${GREEN}  [%s]:[EAT]${RESET}\n\n" "$NOW"
 }
 
-clear
 banner
 get_repo_root() {
     if git rev-parse --is-inside-work-tree &>/dev/null; then
@@ -55,24 +55,17 @@ _log() {
             [ -f "$LOGS_DIR/laugit.log.$i" ] && mv "$LOGS_DIR/laugit.log.$i" "$LOGS_DIR/laugit.log.$((i+1))"
         done
         mv "$LOG_FILE" "$LOGS_DIR/laugit.log.1"
-        printf "${YELLOW}[i]::[Log File Rotated]${RESET}\n"
+        printf "\n${YELLOW}[!]::[Log File Rotated]${RESET}\n"
     fi
     printf "[%s] %s\n" "$(get_timestamp)" "$1" >> "$LOG_FILE"
 }
 
-_sanitize_url_output() {
-    local raw_output="$1"
-    sed -E -e 's#(https://)[^@/]+@#\1***@#g' \
-           -e 's#(git@)[^:]+:#\1***:#g' <<<"$raw_output"
-}
-
 _git_exec() {
     local command_name="$1"; shift
-    
     local cmd_repr
     cmd_repr=$(printf '%q ' "$@")
     
-    printf "\n${CYAN}[+]::[Executing]: git %s${RESET}\n" "$cmd_repr"
+    printf "\n${YELLOW} [+] Executing: git %s${RESET}\n" "$cmd_repr"
     _log "EXEC: git ${cmd_repr}"
     
     local output
@@ -81,16 +74,21 @@ _git_exec() {
     local status=$?
     set -e
 
+    local sanitized_output
+    sanitized_output=$(sed -E -e 's#(https://)[^@/]+@#\1***@#g' -e 's#(git@)[^:]+:#\1***:#g' <<<"$output")
+
     if [ $status -eq 0 ]; then
-        printf "${GREEN}[✔]::[%s] Success.${RESET}\n" "$command_name"
-        if [ -n "$output" ]; then
-            _sanitize_url_output "$output"
+        printf "\n${GREEN}[ %s ]${RESET}\n" "$command_name"
+        if [ -n "$sanitized_output" ]; then
+            printf "\n"
+            printf "%s\n" "$sanitized_output" | awk -v GREEN="${GREEN}" -v RESET="${RESET}" '{print GREEN " " $0 RESET}'
         fi
         _log "SUCCESS: $command_name"
         return 0
     else
-        printf "${RED}[✖]::[%s] Failed! Error details below:${RESET}\n" "$command_name"
-        _sanitize_url_output "$output" | printf "${RED}%s${RESET}\n" "$(< /dev/stdin)"
+        printf "\n${RED}[✖] %s Failed!${RESET}\n" "$command_name"
+        printf "\n"
+        printf "%s\n" "$sanitized_output" | awk -v RED="${RED}" -v RESET="${RESET}" '{print RED " " $0 RESET}'
         _log "FAIL: $command_name - $output"
         return "$status"
     fi
@@ -111,12 +109,12 @@ check_repo_exists() {
 }
 
 check_internet() {
-    printf "\n${CYAN}[?]::[Internet Connection Check]${RESET}\n"
+    printf "\n${CYAN}[?]:[Internet Connection Check.]${RESET}\n"
     if ! curl -Is https://github.com --connect-timeout 3 --max-time 5 >/dev/null 2>&1; then
-        printf "${RED}[!]::[ERROR]: No internet connectivity detected. Cannot proceed with remote operations.${RESET}\n"
+        printf "${RED}[!]::[No Internet Connectivity.]${RESET}\n\n"
         return 1
     fi
-    printf "${GREEN}[✔]::[Internet Connection Good.]${RESET}\n"
+        printf "${GREEN}[✔]::[Internet Connection Good.]${RESET}\n\n"
     return 0
 }
 
@@ -125,14 +123,14 @@ check_dependencies() {
     
     for dep in "${DEPS[@]}"; do
         if ! command -v "$dep" &>/dev/null; then
-            printf "${CYAN}[?]::[Checking Dependencies]${RESET}\n"
-            printf "${RED}[!]::[%s] Not Found — Installing...${RESET}\n" "$dep"
+            printf "\n${CYAN}[?]::[Checking Dependencies]${RESET}\n"
+            printf "\n${RED}[!]::[%s] Not Found — Installing Now${RESET}\n" "$dep"
             if command -v apt &>/dev/null; then
                 sudo apt install -y "$dep" &>/dev/null && printf "${GREEN}[✔]::[%s] Installed${RESET}\n" "$dep" || { printf "${RED}[✖]::[%s] Installation Failed. Aborting.${RESET}\n" "$dep"; exit 1; }
             elif command -v yum &>/dev/null; then
                 sudo yum install -y "$dep" &>/dev/null && printf "${GREEN}[✔]::[%s] Installed${RESET}\n" "$dep" || { printf "${RED}[✖]::[%s] Installation Failed. Aborting.${RESET}\n" "$dep"; exit 1; }
             else
-                printf "${RED}[✖]::[Please install %s manually.]${RESET}\n" "$dep"; exit 1
+                printf "\n${RED}[✖] Please install %s manually.${RESET}\n" "$dep"; exit 1
             fi
         fi
     done
@@ -141,7 +139,7 @@ check_dependencies() {
 load_credentials() {
     if [[ -f "$CREDENTIALS_FILE" ]]; then
         if ! jq -e . "$CREDENTIALS_FILE" >/dev/null 2>&1; then
-             printf "${RED}[✖] Credentials JSON is corrupted or invalid. Please re-enter credentials.${RESET}\n"
+             printf "\n${RED}[✖] Credentials JSON is corrupted or invalid.${RESET}\n"
              rm -f "$CREDENTIALS_FILE"
              return 1
         fi
@@ -166,22 +164,22 @@ check_or_get_user_info() {
         
         printf "${BLUE}[${TOOLNAME}]::[Your Git Name]:${RESET} "
         read -r user_name
-        printf "${BLUE}[${TOOLNAME}]::[Your Git Email]:${RESET} "
+        printf "\n${BLUE}[${TOOLNAME}]::[Your Git Email]:${RESET} "
         read -r user_email
         
         _git_exec "Config Name" config --global user.name "$user_name"
         _git_exec "Config Email" config --global user.email "$user_email"
     else
-        printf "${RED}      [ U S E R ]${RESET}\n"
-        printf "\n${GREEN}   [USERS]: ${RESET}${YELLOW}$name${RESET}"
-        printf "\n${GREEN}   [EMAIL]: ${RESET}${YELLOW}$email${RESET}\n\n"
+        printf "\n${RED}      [ U S E R ]${RESET}\n"
+        printf "\n${GREEN}    [USERS]: ${RESET}${YELLOW}$name${RESET}"
+        printf "\n${GREEN}    [EMAIL]: ${RESET}${YELLOW}$email${RESET}\n\n"
     fi
 }
 
 verify_credentials() {
     if ! check_internet; then return 1; fi
     
-    printf "${CYAN}[?]::[Verifying GitHub Token via API...]${RESET}\n"
+    printf "\n${CYAN}[?]::[Verifying GitHub Token via API]${RESET}\n"
     local resp http_code body
     
     set +e
@@ -197,9 +195,9 @@ verify_credentials() {
     else
         printf "${RED}[✖]::[Token Verification Failed (HTTP %s)]${RESET}\n" "$http_code"
         if [ "$http_code" -eq 401 ]; then
-            printf "${YELLOW}[i]::[Reason]: Token is invalid or expired. Please check scope settings.${RESET}\n"
+            printf "${RED}[!]::[Reason]: Token is invalid${RESET}\n"
         elif [ "$http_code" -eq 403 ]; then
-            printf "${YELLOW}[i]::[Reason]: Forbidden (e.g., rate limit exceeded or token lacks sufficient scope).${RESET}\n"
+            printf "${RED}[!]::[Reason]: Forbidden Token${RESET}\n"
         fi
         _log "Verification failed: HTTP $http_code. Response: $body"
         return 1
@@ -207,11 +205,11 @@ verify_credentials() {
 }
 
 add_credentials() {
-    printf "\n${YELLOW}[${TOOLNAME}]::[Add Credentials]${RESET}\n\n"
+    printf "\n${RED}    [ ADD CREDS ]${RESET}\n\n"
     
-    printf "${BLUE}[${TOOLNAME}]::[GitHub Username]:${RESET} "
+    printf "${BLUE}  [GitHub Username]:${RESET} "
     read -r user
-    printf "${BLUE}[${TOOLNAME}]::[GitHub Token (PAT)]:${RESET} "
+    printf "${BLUE}  [GitHub Token[PAT]:${RESET} "
     read -rs token
     printf "\n"
     
@@ -225,13 +223,13 @@ add_credentials() {
     else
         GITHUB_USERNAME=""
         GITHUB_TOKEN=""
-        printf "${RED}[!]::[Credentials NOT Saved due to verification failure.]${RESET}\n\n"
+        printf "${RED}[!]::[Credentials NOT Saved due to verification failure]${RESET}\n\n"
     fi
     pause
 }
 
 view_credentials() {
-    printf "\n${YELLOW}[${TOOLNAME}]::[View Credentials]${RESET}\n\n"
+    printf "\n${RED}    [ VIEW CREDS ]${RESET}\n\n"
     
     if [[ -f "$CREDENTIALS_FILE" ]]; then
         local username
@@ -241,31 +239,57 @@ view_credentials() {
         local token_start="${token:0:8}"
 
         
-        printf "${CYAN} Credentials File:${RESET} %s\n" "$CREDENTIALS_FILE"
+        printf "${CYAN} [File]:${RESET} %s\n" "$CREDENTIALS_FILE"
         printf "\n${GREEN}  [Git Username]:${RESET} %s\n" "$username"
         printf "${GREEN}  [GitHub Token]:${RESET} %s******************** \n" "$token_start"
     else
         printf "${RED}[!] No credentials found${RESET}\n"
-        printf "${YELLOW}Add Credentials to save them.${RESET}\n"
+        printf "${YELLOW} [Add Credentials to save them]${RESET}\n"
     fi
     pause
 }
 
+update_remote_url_with_token() {
+    load_credentials
+    if check_repo_exists "cli"; then
+        if [[ -n "$GITHUB_USERNAME" && -n "$GITHUB_TOKEN" ]]; then
+            local current_url
+            set +e
+            current_url=$(git config remote.origin.url 2>/dev/null)
+            set -e
+
+            if [[ -n "$current_url" ]]; then
+                local base_url
+                base_url=$(echo "$current_url" | sed -E 's#^https://[^@/]+@#https://#g' | sed 's#^git@github.com:#https://github.com/#')
+                
+                local token_url
+                token_url=$(echo "$base_url" | sed "s#https://#https://$GITHUB_USERNAME:$GITHUB_TOKEN@#")
+                
+                if ! grep -q "$GITHUB_USERNAME:$GITHUB_TOKEN" <<< "$current_url"; then
+                        printf "\n${CYAN}[!]::[Injecting Credentials]${RESET}\n"
+                    if _git_exec "Set Remote Auth" remote set-url origin "$token_url"; then
+                        printf "${GREEN}[✔]::[Credentials Injected]${RESET}\n"
+                    fi
+                fi
+            fi
+        fi
+    fi
+}
+
 init_and_push() {
-    if ! check_internet; then pause; return; fi # Added internet check from B
+    if ! check_internet; then pause; return; fi
 
     load_credentials
-    printf "\n${RED}  [ LOCAL SETUP ]${RESET}\n"
+    printf "\n${RED}    [ LOCAL MENU ]${RESET}\n\n"
     if [[ -z "$GITHUB_USERNAME" || -z "$GITHUB_TOKEN" ]]; then
-        echo -e "\n${RED}[!]::[Missing GitHub credentials. Please add credentials first.]${RESET}\n"
+        echo -e "\n${RED}[!]::[Missing GitHub credentials]${RESET}\n"
         pause
         return
     fi
 
-    echo -e "\n${YELLOW}[${TOOLNAME}]::[Create New Repository]${RESET}\n"
-    read -rp "$(echo -e ${BLUE}[${TOOLNAME}]::[Enter path to your Repo]:${RESET} )" folder
+    echo -e "\n${YELLOW}  [ Create New Repository ]${RESET}\n"
+    read -rp "$(echo -e ${BLUE} [${TOOLNAME}]::[Enter path to your Repo]:${RESET} )" folder
     
-    # Check if folder is empty
     if [[ -z "$folder" ]]; then
         echo -e "\n${RED}[!] Repo path cannot be empty${RESET}\n"
         pause
@@ -274,52 +298,45 @@ init_and_push() {
 
     mkdir -p "$folder"
     if ! cd "$folder"; then
-        echo -e "\n${RED}[ERROR]: Could not change directory to %s. Aborting.${RESET}\n" "$folder"
+        echo -e "\n${RED}[!] Failed to change directory to %s${RESET}\n" "$folder"
         pause
         return
     fi
 
-    echo -e "\n${GREEN}[+]::[Initializing Repo]${RESET}\n"
-    git init &>/dev/null
-    git add . &>/dev/null
-
+    echo -e "\n${GREEN}  [ Initializing Repo ]${RESET}\n"
+    _git_exec "Init" init
+    _git_exec "Add All" add .
+    printf "\n"
     read -rp "$(echo -e ${BLUE}[${TOOLNAME}]::[Enter Commit Description]:${RESET} )" commit_msg
-    # Use a default message if commit_msg is empty
-    git commit -m "${commit_msg:-Initial commit via script}" &>/dev/null
+    _git_exec "Commit" commit -m "${commit_msg:-Initial commit via script}"
 
-    echo -e "\n${CYAN}[Instructions]${RESET}\n"
-    echo -e "${YELLOW}1. Go to https://github.com/new and create a new repository.${RESET}"
-    echo -e "${YELLOW}2. Copy its HTTPS URL and paste it below.${RESET}\n"
+    echo -e "\n${CYAN}    [ INSTRUCTIONS ]${RESET}\n"
+    echo -e "${YELLOW} [1] Go to https://github.com/new and create a new repository.${RESET}"
+    echo -e "${YELLOW} [2] Copy its HTTPS URL and paste it below.${RESET}\n"
 
     read -rp "$(echo -e ${BLUE}[${TOOLNAME}]::[Paste Repo Link]:${RESET} )" remote_url
     
-    # Simple validation for remote_url
     if [[ -z "$remote_url" ]]; then
-        echo -e "${RED}[!]::[Repo link cannot be empty.]${RESET}\n"
+        echo -e "\n${RED}[!] Repo link cannot be empty.${RESET}\n"
         pause
         return
     fi
 
-    # Injecting credentials directly into the URL (Code A's working method)
     token_url=$(echo "$remote_url" | sed "s#https://#https://$GITHUB_USERNAME:$GITHUB_TOKEN@#")
 
-    echo -e "\n${YELLOW}[+]::[Configuring Remote + Pushing]${RESET}"
+    echo -e "\n${GREEN} [+] Configuring Remote and Pushing${RESET}"
     
-    # These commands are run silently to prevent output interference
-    git branch -M main &>/dev/null
-    git remote add origin "$token_url" &>/dev/null
+    _git_exec "Branch Main" branch -M main
+    _git_exec "Add Origin" remote add origin "$token_url"
     
-    # Attempt to pull/rebase, ignore if fails (typical for first push to empty repo)
-    git pull origin main --rebase &>/dev/null || true 
+    _git_exec "Pull Rebase (Initial)" pull origin main --rebase || true
     
-    # Force push to ensure local content overwrites any initial files (like README)
-    git push -u origin main --force &>/dev/null 
+    _git_exec "Push Force" push -u origin main --force
 
-    # Check the exit status of the push command
     if [ $? -eq 0 ]; then
-        echo -e "\n${GREEN}[✔]::[Repository Created & Pushed Successfully]${RESET}\n"
+        echo -e "\n${GREEN}[✔] Repository Created & Pushed Successfully.${RESET}\n"
     else
-        echo -e "\n${RED}[!]::[Push FAILED. Check your PAT/Username or the remote URL.]${RESET}\n"
+        echo -e "\n${RED}[!] Push FAILED. Check your PAT/Username or the remote URL${RESET}\n"
     fi
 
     pause
@@ -328,9 +345,9 @@ init_and_push() {
 clone_repo() {
     if ! check_internet; then pause; return; fi
     printf "\n${RED}  [ LOCAL SETUP ]${RESET}\n"
-    printf "\n${YELLOW}[${TOOLNAME}]::[Clone Repo]${RESET}\n\n"
+    printf "\n${YELLOW} [ CLONE REPO ]${RESET}\n\n"
     
-    printf "${BLUE}[${TOOLNAME}]:[Enter Github Repo]:${RESET} "
+    printf "${BLUE}[${TOOLNAME}]:[Enter Github  URL]:${RESET} "
     read -r url
     printf "${BLUE}[${TOOLNAME}]:[Enter Destination]: ${RESET} "
     read -r folder
@@ -345,14 +362,14 @@ clone_repo() {
 
 git_status() {
     if ! check_repo_exists "interactive"; then return; fi
-    printf "\n${YELLOW}[${TOOLNAME}]::[Status]${RESET}\n\n"
+    printf "\n${YELLOW} [ Status ]${RESET}\n\n"
     _git_exec "Status" status
     pause
 }
 
 git_add() {
     if ! check_repo_exists "interactive"; then return; fi
-    printf "\n${YELLOW}[${TOOLNAME}]::[Add to Staging]${RESET}\n\n"
+    printf "\n${YELLOW} [ Add to Staging ]${RESET}\n\n"
     
     printf "${BLUE}[${TOOLNAME}]::[File/Path to add ('.' for all)]: ${RESET} "
     read -r path_to_add
@@ -364,12 +381,12 @@ git_add() {
 
 git_commit() {
     if ! check_repo_exists "interactive"; then return; fi
-    printf "\n${YELLOW}[${TOOLNAME}]::[Commit Staged Changes]${RESET}\n\n"
+    printf "\n${YELLOW} [ Commit Staging ]${RESET}\n\n"
     
     set +e
     if git diff --cached --quiet; then
         set -e
-        printf "${RED}[!]::[No changes staged for commit. Use option 2: Add first.]${RESET}\n"
+        printf "\n${RED}[!] No changes staged for commit. Add first.${RESET}\n"
         pause
         return
     fi
@@ -382,44 +399,70 @@ git_commit() {
     pause
 }
 
+# START: Git Log fix
 git_log() {
     if ! check_repo_exists "interactive"; then return; fi
-    printf "\n${YELLOW}[${TOOLNAME}]::[Commit History]${RESET}\n\n"
-    printf "${CYAN}[Option: Log --oneline --graph (Top 20)]${RESET}\n"
-    git log --oneline --graph --all | head -n 20
+    printf "\n${YELLOW} [ History ]${RESET}\n"
+
+    # Display oneline/graph log using _git_exec styling
+    printf "\n${CYAN}[Option: Log --oneline --graph (Top 20)]${RESET}\n"
+    local oneline_output
+    set +e
+    oneline_output=$(git log --oneline --graph --all -n 20 2>&1)
+    local status=$?
+    set -e
+    if [ $status -eq 0 ]; then
+        printf "\n"
+        printf "%s\n" "$oneline_output" | awk -v GREEN="${GREEN}" -v RESET="${RESET}" '{print GREEN " " $0 RESET}'
+        _log "SUCCESS: Log --oneline"
+    else
+        printf "\n${RED}[✖] Log --oneline Failed! Error Below.${RESET}\n"
+        printf "\n"
+        printf "%s\n" "$oneline_output" | awk -v RED="${RED}" -v RESET="${RESET}" '{print RED " " $0 RESET}'
+        _log "FAIL: Log --oneline - $oneline_output"
+    fi
+
+    # Display full log using pager
     printf "\n${CYAN}[Option: Full Log (press Q to exit)]${RESET}\n"
     local log_output
     log_output=$(git log 2>&1)
     printf "%s\n" "$log_output" | ${PAGER:-less -R}
     pause
 }
+# END: Git Log fix
 
 git_diff() {
     if ! check_repo_exists "interactive"; then return; fi
-    printf "\n${YELLOW}[${TOOLNAME}]::[Diff Changes]${RESET}\n\n"
+    printf "\n${YELLOW} [ Diff Changes ]${RESET}\n\n"
     
-    printf "${CYAN}1. Unstaged Changes (Working Dir vs Staging)${RESET}\n"
-    printf "${CYAN}2. Staged Changes (Staging vs Last Commit)${RESET}\n"
+    printf "${CYAN} [1] Unstaged Changes${RESET}\n"
+    printf "${CYAN} [2] Staged    Changes${RESET}\n"
+    printf "\n${RED}[X] Local Menu${RESET}\n\n"
     printf "${BLUE}[${TOOLNAME}]::[Select Diff Type]: ${RESET} "
     read -r diff_choice
 
     local diff_output
+    local log_msg
     case $diff_choice in
-        1) diff_output=$(git diff 2>&1); _log "EXEC: git diff" ;;
-        2) diff_output=$(git diff --staged 2>&1); _log "EXEC: git diff --staged" ;;
-        *) printf "${RED}[!]::[Invalid selection.]${RESET}\n"; pause; return ;;
+        1) diff_output=$(git diff 2>&1); log_msg="EXEC: git diff" ;;
+        2) diff_output=$(git diff --staged 2>&1); log_msg="EXEC: git diff --staged" ;;
+        [Xx]) return ;;
+        *) printf "\n${RED}[!] Invalid selection.${RESET}\n"; pause; return ;;
     esac
+    printf "\n${YELLOW} [+] Executing: git diff${RESET}\n"
+    _log "$log_msg"
     printf "%s\n" "$diff_output" | ${PAGER:-less -R}
     pause
 }
 
 git_undo() {
     if ! check_repo_exists "interactive"; then return; fi
-    printf "\n${YELLOW}[${TOOLNAME}]::[Undo Changes]${RESET}\n\n"
+    printf "\n${YELLOW} [ Undo Changes ]${RESET}\n\n"
     
-    printf "${CYAN}1. Restore (Discard changes in working directory: git restore [file])${RESET}\n"
-    printf "${CYAN}2. Unstage (Move staged files back to working directory: git reset [file])${RESET}\n"
-    printf "${CYAN}3. HARD Reset (Discard all changes since a specific commit - DANGEROUS!)${RESET}\n"
+    printf "${CYAN} [1] Restore${RESET}\n"
+    printf "${CYAN} [2] Unstage${RESET}\n"
+    printf "${CYAN} [3] Discard${RESET}\n"
+    printf "\n${RED}[X] Local Menu${RESET}\n\n"
     printf "${BLUE}[${TOOLNAME}]::[Select Undo Action]: ${RESET} "
     read -r undo_choice
     
@@ -435,44 +478,62 @@ git_undo() {
             _git_exec "Unstage" reset "$file"
             ;;
         3)
-            printf "${RED}!!! DANGEROUS !!! [Type COMMIT HASH or I-UNDERSTAND-RESET to continue]: ${RESET} "
+            printf "${RED}[${TOOLNAME}]::[Type ${RESET}${CYAN}I-UNDERSTAND-RESET${RESET}${RED} to continue]: ${RESET} "
             read -r confirmation_hash
             
             if [[ "$confirmation_hash" == "I-UNDERSTAND-RESET" ]]; then
-                printf "${RED}Performing hard reset on HEAD. Final confirmation (yes/no): ${RESET} "
+                printf "${RED}[?] Final confirmation to HARD RESET (yes/no): ${RESET} "
                 read -r final_confirm
                 if [[ "$final_confirm" == "yes" ]]; then
                     _git_exec "HARD Reset" reset --hard HEAD
                 else
-                    printf "${YELLOW}[i]::[Reset cancelled.]${RESET}\n"
+                    printf "${YELLOW}[!] Reset cancelled.${RESET}\n"
                 fi
             elif [[ "$confirmation_hash" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
-                printf "${RED}Resetting to hash %s. Final confirmation (yes/no): ${RESET} " "$confirmation_hash"
+                printf "${RED}[!] Hash %s. Final confirmation (yes/no): ${RESET} " "$confirmation_hash"
                 read -r final_confirm
                 if [[ "$final_confirm" == "yes" ]]; then
                     _git_exec "HARD Reset" reset --hard "$confirmation_hash"
                 else
-                    printf "${YELLOW}[i]::[Reset cancelled.]${RESET}\n"
+                    printf "${YELLOW}[!] Reset cancelled.${RESET}\n"
                 fi
             else
-                printf "${YELLOW}[i]::[Confirmation failed or invalid hash format. Reset cancelled.]${RESET}\n"
+                printf "${RED}[!] Confirmation failed or invalid hash format.${RESET}\n"
             fi
             ;;
-        *) printf "${RED}[!]::[Invalid selection.]${RESET}\n" ;;
+      [Xx]) break ;;
+        *) printf "\n${RED}[!] Invalid selection.${RESET}\n" ;;
     esac
     pause
 }
 
 git_branch_list() {
     if ! check_repo_exists "interactive"; then return; fi
-    printf "\n${YELLOW}[${TOOLNAME}]::[Branch List]${RESET}\n\n"
+    printf "\n${YELLOW} [ Branch List ]${RESET}\n\n"
     _git_exec "Branch List" branch -a
     pause
 }
 
+# START: New function to switch branch
+git_branch_switch() {
+    if ! check_repo_exists "interactive"; then return; fi
+    printf "\n${YELLOW} [ Switch Branch ]${RESET}\n\n"
+    _git_exec "Branch List" branch -l
+    printf "${BLUE}[${TOOLNAME}]::[Branch Name to Switch To]: ${RESET} "
+    read -r target_branch
+    
+    if [ -z "$target_branch" ]; then
+        printf "${RED}[!] Branch name cannot be empty.${RESET}\n"
+    else
+        _git_exec "Switch Branch" checkout "$target_branch"
+    fi
+    pause
+}
+# END: New function to switch branch
+
 git_branch_create_switch() {
     if ! check_repo_exists "interactive"; then return; fi
-    printf "\n${YELLOW}[${TOOLNAME}]::[Create & Switch Branch]${RESET}\n\n"
+    printf "\n${YELLOW} [ Create & Switch Branch ]${RESET}\n\n"
     printf "${BLUE}[${TOOLNAME}]::[New Branch Name]: ${RESET} "
     read -r new_branch
     
@@ -484,8 +545,8 @@ git_branch_merge() {
     if ! check_repo_exists "interactive"; then return; fi
     local current_branch
     current_branch=$(git rev-parse --abbrev-ref HEAD)
-    printf "\n${YELLOW}[${TOOLNAME}]::[Merge Branch]${RESET}\n"
-    printf "${MAGENTA}Current Branch: %s${RESET}\n" "$current_branch"
+    printf "\n${YELLOW} [ Merge Branch ]${RESET}\n\n"
+    printf "${MAGENTA}[Current Branch]: %s${RESET}\n" "$current_branch"
     _git_exec "Branch List" branch
     
     printf "${BLUE}[${TOOLNAME}]::[Branch to MERGE into %s]: ${RESET} " "$current_branch"
@@ -499,12 +560,12 @@ git_branch_rebase() {
     if ! check_repo_exists "interactive"; then return; fi
     local current_branch
     current_branch=$(git rev-parse --abbrev-ref HEAD)
-    printf "\n${YELLOW}[${TOOLNAME}]::[Rebase Branch]${RESET}\n"
-    printf "${RED}!!! WARNING: Do not rebase published commits !!!${RESET}\n"
-    printf "${MAGENTA}Current Branch: %s${RESET}\n" "$current_branch"
+    printf "\n${YELLOW} [ Rebase Branch ]${RESET}\n\n"
+    printf "${RED}[!] WARNING: Do not rebase published commits!${RESET}\n"
+    printf "\n${MAGENTA}[Current Branch]: %s${RESET}\n" "$current_branch"
     _git_exec "Branch List" branch
     
-    printf "${BLUE}[${TOOLNAME}]::[Branch to rebase %s ONTO (e.g., main)]: ${RESET} " "$current_branch"
+    printf "${BLUE}[${TOOLNAME}]::[Branch to rebase %s ONTO]: ${RESET} " "$current_branch"
     read -r target_branch
     
     _git_exec "Rebase" rebase "$target_branch"
@@ -513,166 +574,248 @@ git_branch_rebase() {
 
 git_branch_delete() {
     if ! check_repo_exists "interactive"; then return; fi
-    printf "\n${YELLOW}[${TOOLNAME}]::[Delete Branch]${RESET}\n\n"
+    printf "\n${YELLOW} [ Delete Branch ]${RESET}\n\n"
     _git_exec "Branch List" branch
     
-    printf "${BLUE}[${TOOLNAME}]::[Branch to DELETE (local)]: ${RESET} "
+    printf "${BLUE}[${TOOLNAME}]::[Branch to DELETE]: ${RESET} "
     read -r branch_to_delete
     
-    printf "${RED}Delete branch '%s'? Use '-D' for force delete? (d/D/n): ${RESET} " "$branch_to_delete"
+    printf "${RED}[${TOOLNAME}]::[Delete '%s' branch Use '-D' for force delete[d/D/n]: ${RESET} " "$branch_to_delete"
     read -r confirm
     
     case $confirm in
         d) _git_exec "Delete Branch" branch -d "$branch_to_delete" ;;
         D) _git_exec "Force Delete Branch" branch -D "$branch_to_delete" ;;
-        *) printf "${YELLOW}[i]::[Deletion cancelled.]${RESET}\n";;
+        *) printf "\n${YELLOW}[!] Deletion cancelled.${RESET}\n";;
     esac
     pause
 }
-
+# START: Stash menu fix (ensuring _git_exec is used for consistency)
 git_stash_menu() {
     if ! check_repo_exists "interactive"; then return; fi
-    printf "\n${YELLOW}[${TOOLNAME}]::[Stash Changes]${RESET}\n\n"
+    printf "\n${YELLOW} [ Stash Changes ]${RESET}\n\n"
     
-    printf "${CYAN}1. Stash (Save uncommitted changes)${RESET}\n"
-    printf "${CYAN}2. Apply (Bring back the most recent stash, keeping it in list)${RESET}\n"
-    printf "${CYAN}3. Pop (Bring back the most recent stash, deleting it from list)${RESET}\n"
-    printf "${CYAN}4. List (Show all stashed items)${RESET}\n"
-    printf "${CYAN}5. Drop (Permanently delete a stash item)${RESET}\n"
+    printf "${CYAN} [1] Stash${RESET}\n"
+    printf "${CYAN} [2] Apply${RESET}\n"
+    printf "${CYAN} [3] Pop${RESET}\n"
+    printf "${CYAN} [4] List${RESET}\n"
+    printf "${CYAN} [5] Drop${RESET}\n"
+    printf "\n${RED}[X] Local Menu${RESET}\n\n"
     printf "${BLUE}[${TOOLNAME}]::[Select Stash Action]: ${RESET} "
     read -r stash_choice
     
     case $stash_choice in
         1)
-            printf "${BLUE}[${TOOLNAME}]::[Stash Message (optional)]: ${RESET} "
+            printf "${BLUE}[${TOOLNAME}]::[Stash Message [optional]: ${RESET} "
             read -r stash_msg
-            _git_exec "Stash Save" stash push -m "$stash_msg"
+            _git_exec "Stash Save" stash push -m "${stash_msg:-Auto Stash}"
             ;;
         2)
-            _git_exec "Stash Apply" stash apply
+            _git_exec "Stash List" stash list # Show list before applying
+            printf "${BLUE}[${TOOLNAME}]::[Index to Apply (leave blank for latest)]: ${RESET} "
+            local stash_index
+            read -r stash_index
+            _git_exec "Stash Apply" stash apply "$stash_index"
             ;;
         3)
-            _git_exec "Stash Pop" stash pop
+            _git_exec "Stash List" stash list # Show list before popping
+            printf "${BLUE}[${TOOLNAME}]::[Index to Pop (leave blank for latest)]: ${RESET} "
+            local stash_index
+            read -r stash_index
+            _git_exec "Stash Pop" stash pop "$stash_index"
             ;;
         4)
             _git_exec "Stash List" stash list
             ;;
         5)
             _git_exec "Stash List" stash list
-            printf "${BLUE}[${TOOLNAME}]::[Index to Drop (e.g., stash@{1})]: ${RESET} "
+            printf "${BLUE}[${TOOLNAME}]::[Index to Drop [e.g.stash@{1}]: ${RESET} "
+            local stash_index
             read -r stash_index
-            _git_exec "Stash Drop" stash drop "$stash_index"
+            if [[ -n "$stash_index" ]]; then
+                _git_exec "Stash Drop" stash drop "$stash_index"
+            else
+                 printf "\n${RED}[!] Stash index is required to drop.${RESET}\n"
+            fi
             ;;
-        *) printf "${RED}[!]::[Invalid selection.]${RESET}\n" ;;
+      [Xx]) return ;;
+        *) printf "\n${RED}[!] Invalid selection.${RESET}\n" ;;
     esac
     pause
 }
+# END: Stash menu fix
 
 git_tag_menu() {
     if ! check_repo_exists "interactive"; then return; fi
-    printf "\n${YELLOW}[${TOOLNAME}]::[Tag Management]${RESET}\n\n"
-    printf "${CYAN}[1] List Tags${RESET}\n"
-    printf "${CYAN}[2] Create Tag${RESET}\n"
-    printf "${CYAN}[3] Delete Local Tag${RESET}\n"
-    printf "${CYAN}[4] Push Tag to Remote${RESET}\n"
-    printf "${BLUE}[${TOOLNAME}]::[Select Tag Action]: ${RESET} "
-    read -r tag_choice
     
-    case $tag_choice in
-        1)
-            if ! check_internet; then pause; return; fi
-            _git_exec "List Tags" tag -l
-            _git_exec "List Remote Tags" ls-remote --tags origin
-            ;;
-        2)
-            printf "${BLUE}[${TOOLNAME}]::[Tag Name (e.g., v1.0.0)]: ${RESET} "
-            read -r tag_name
-            printf "${BLUE}[${TOOLNAME}]::[Tag Message]: ${RESET} "
-            read -r tag_msg
-            _git_exec "Create Tag" tag -a "$tag_name" -m "$tag_msg"
-            ;;
-        3)
-            _git_exec "List Tags" tag -l
-            printf "${BLUE}[${TOOLNAME}]::[Tag Name to Delete Locally]: ${RESET} "
-            read -r tag_name
-            _git_exec "Delete Local Tag" tag -d "$tag_name"
-            ;;
-        4)
-            if ! check_internet; then pause; return; fi
-            _git_exec "List Tags" tag -l
-            printf "${BLUE}[${TOOLNAME}]::[Tag Name to Push]: ${RESET} "
-            read -r tag_name
-            _git_exec "Push Tag" push origin "$tag_name"
-            ;;
-        *) printf "${RED}[!]::[Invalid selection.]${RESET}\n" ;;
-    esac
-    pause
+    while true; do
+        printf "\n${YELLOW} [ Tag Management ]${RESET}\n\n"
+        printf "${CYAN} [1] List Tags${RESET}\n"
+        printf "${CYAN} [2] Create Tag${RESET}\n"
+        printf "${CYAN} [3] Delete Local Tag${RESET}\n"
+        printf "${CYAN} [4] Push Tag to Remote${RESET}\n"
+        printf "\n${RED} [X] Local Menu${RESET}\n\n"
+        printf "${BLUE}[${TOOLNAME}]::[Select Tag Action]: ${RESET} "
+        read -r tag_choice
+        
+        case $tag_choice in
+            1)
+                if ! check_internet; then pause; return; fi
+                update_remote_url_with_token
+                _git_exec "List Tags" tag -l
+                _git_exec "List Remote Tags" ls-remote --tags origin
+                ;;
+            2)
+                printf "${BLUE}[${TOOLNAME}]::[Tag Name (e.g., v1.0.0)]: ${RESET} "
+                read -r tag_name
+                printf "${BLUE}[${TOOLNAME}]::[Tag Message]: ${RESET} "
+                read -r tag_msg
+                _git_exec "Create Tag" tag -a "$tag_name" -m "$tag_msg"
+                ;;
+            3)
+                _git_exec "List Tags" tag -l
+                printf "${BLUE}[${TOOLNAME}]::[Tag Name to Delete Locally]: ${RESET} "
+                read -r tag_name
+                _git_exec "Delete Local Tag" tag -d "$tag_name"
+                ;;
+            4)
+                if ! check_internet; then pause; return; fi
+                update_remote_url_with_token
+                _git_exec "List Tags" tag -l
+                printf "${BLUE}[${TOOLNAME}]::[Tag Name to Push]: ${RESET} "
+                read -r tag_name
+                _git_exec "Push Tag" push origin "$tag_name"
+                ;;
+            [Xx]) break ;;
+            *) printf "${RED}[!] Invalid selection.${RESET}\n" ;;
+        esac
+        pause
+    done
 }
 
+# START: Dynamic gitignore builder fix
 _build_gitignore() {
-    local templates=(
-        "Python" "Node" "C/C++" "Java" "Go" "PHP" "Swift" "Rust"
-        "macOS" "Windows" "Linux" "Global/Misc"
-    )
-    
-    printf "\n${YELLOW}[${TOOLNAME}]::[.gitignore Builder]${RESET}\n"
-    printf "\n${RED} [ CONFIGURATIONS ]${RESET}\n\n"
-    printf "${MAGENTA}Select templates to include (space-separated numbers, e.g., 1 2 9):${RESET}\n"
-    
-    local i=1
-    for t in "${templates[@]}"; do
-        printf "  [${YELLOW}%s${RESET}] %s\n" "$i" "$t"
-        i=$((i+1))
-    done
+    if ! check_repo_exists "interactive"; then 
+        printf "\n${RED}[!] Not a Git repository. Run 'init' first.${RESET}\n"
+        pause
+        return
+    fi
+    printf "\n${YELLOW} [ Gitignore Builder ]${RESET}\n\n"
 
-    printf "${BLUE}[${TOOLNAME}]::[Selections]: ${RESET} "
-    read -r choices
-
-    if [ -z "$choices" ]; then
-        printf "${YELLOW}[i]::[Cancelled .gitignore generation.]${RESET}\n"
+    # Get list of files/directories (excluding hidden ones except for .gitignore itself)
+    local all_files_array
+    mapfile -t all_files_array < <(find . -maxdepth 1 -mindepth 1 -name .git -prune -o -print | sed 's/^\.\///')
+    
+    if [ ${#all_files_array[@]} -eq 0 ]; then
+        printf "${YELLOW}[!] Current directory is empty. Nothing to ignore.${RESET}\n"
+        pause
         return
     fi
 
-    local selected_content=""
-    for choice in $choices; do
-        local index=$((choice-1))
-        local template_name="${templates[$index]}"
-        
-        case "$template_name" in
-            "Python") selected_content+="# Python\n__pycache__/\n*.pyc\nvenv/\n" ;;
-            "Node") selected_content+="# Node.js\nnode_modules/\nbuild/\n.env\n" ;;
-            "C/C++") selected_content+="# C/C++\n*.o\n*.a\n*.out\n" ;;
-            "Java") selected_content+="# Java\n*.class\n/bin/\n/target/\n" ;;
-            "Go") selected_content+="# Go\n*.exe\n" ;;
-            "PHP") selected_content+="# PHP\nvendor/\n" ;;
-            "macOS") selected_content+="# macOS\n.DS_Store\n" ;;
-            "Windows") selected_content+="# Windows\nThumbs.db\n" ;;
-            "Global/Misc") selected_content+="# Misc\n*.log\n" ;;
-            "Swift") selected_content+="# Swift\n.build/\nPackage.resolved\n" ;;
-            "Rust") selected_content+="# Rust\n/target/\n" ;;
-            "Linux") selected_content+="# Linux\n*~\n" ;;
-        esac
+    printf "${CYAN} [ Modes ]${RESET}\n"
+    printf "${CYAN} [U] Use Mode (Select files to KEEP/TRACK - Others will be ignored)${RESET}\n"
+    printf "${CYAN} [I] Ignore Mode (Select files to IGNORE - Others will be kept)${RESET}\n"
+    printf "\n${RED}[X] Cancel${RESET}\n\n"
+    printf "${BLUE}[${TOOLNAME}]::[Select Mode]: ${RESET} "
+    read -r mode_choice
+
+    case "$mode_choice" in
+        [Uu]) local mode="use" ;;
+        [Ii]) local mode="ignore" ;;
+        [Xx]) printf "\n${YELLOW}[!] Cancelled .gitignore generation.${RESET}\n"; pause; return ;;
+        *) printf "\n${RED}[!] Invalid mode selection. Cancelled.${RESET}\n"; pause; return ;;
+    esac
+
+    printf "\n${MAGENTA} [ Current Directory Contents ]${RESET}\n"
+    local indexed_files=()
+    local i=1
+    for file in "${all_files_array[@]}"; do
+        indexed_files[i]="$file"
+        printf "  [${YELLOW}%s${RESET}] %s\n" "$i" "$file"
+        i=$((i+1))
     done
 
+    printf "\n${BLUE}[${TOOLNAME}]::[Enter file numbers to ${mode^^} (e.g., 1 3 4 or 1-3)]: ${RESET} "
+    read -r choices_str
+
+    if [ -z "$choices_str" ]; then
+        printf "\n${YELLOW}[!] No files selected. Cancelled .gitignore generation.${RESET}\n"
+        pause
+        return
+    fi
+
+    local selected_files=()
+    local selections
+    IFS=' ' read -r -a selections <<< "$choices_str"
+    
+    # Process choices, including ranges
+    for choice in "${selections[@]}"; do
+        if [[ "$choice" =~ ^[0-9]+-[0-9]+$ ]]; then
+            local start
+            local end
+            start="${choice%-*}"
+            end="${choice#*-}"
+            for ((j=start; j<=end; j++)); do
+                if [ -n "${indexed_files[$j]}" ]; then
+                    selected_files+=("${indexed_files[$j]}")
+                fi
+            done
+        elif [[ "$choice" =~ ^[0-9]+$ ]]; then
+            if [ -n "${indexed_files[$choice]}" ]; then
+                selected_files+=("${indexed_files[$choice]}")
+            fi
+        fi
+    done
+
+    if [ ${#selected_files[@]} -eq 0 ]; then
+        printf "\n${RED}[!] No valid files selected. Cancelled .gitignore generation.${RESET}\n"
+        pause
+        return
+    fi
+
+    local ignore_content="# Generated by $TOOLNAME on $(get_timestamp)\n"
+
+    if [ "$mode" == "ignore" ]; then
+        # Ignore Mode: Add selected files/dirs to ignore_content
+        for file in "${selected_files[@]}"; do
+            ignore_content+="/$file\n" # Add a leading slash to ignore only in the current directory
+        done
+        printf "\n${CYAN}[I] Ignoring selected files:${RESET}\n"
+        printf "%s\n" "${selected_files[@]}" | awk -v CYAN="${CYAN}" -v RESET="${RESET}" '{print " " CYAN "- " $0 RESET}'
+    elif [ "$mode" == "use" ]; then
+        # Use Mode: Add all *unselected* files/dirs to ignore_content
+        local kept_files=" ${selected_files[*]} "
+        for file in "${all_files_array[@]}"; do
+            if ! grep -q " ${file} " <<< "$kept_files"; then
+                ignore_content+="/$file\n"
+            fi
+        done
+        printf "\n${CYAN}[U] Keeping selected files (ignoring others):${RESET}\n"
+        printf "%s\n" "${selected_files[@]}" | awk -v CYAN="${CYAN}" -v RESET="${RESET}" '{print " " CYAN "- " $0 RESET}'
+    fi
+    
+    local final_content="$ignore_content"
     if [ -f .gitignore ]; then
-        printf "${MAGENTA}.gitignore already exists. Append? (y/N): ${RESET} "
+        printf "\n${MAGENTA}[-] .gitignore already exists. Append new content? (y/N): ${RESET} "
         read -r append_confirm
         if [[ "$append_confirm" == "y" || "$append_confirm" == "Y" ]]; then
-            printf "\n%s" "$selected_content" >> .gitignore
-            printf "${GREEN}[✔]::[Content appended to .gitignore]${RESET}\n"
+            printf "\n%s" "$final_content" >> .gitignore
+            printf "${GREEN}[✔] Content appended to .gitignore.${RESET}\n"
         else
-            printf "${YELLOW}[i]::[Skipping .gitignore update.]${RESET}\n"
+            printf "\n${YELLOW}[!] Skipping .gitignore update.${RESET}\n"
         fi
     else
-        printf "%s" "$selected_content" > .gitignore
-        printf "${GREEN}[✔]::[.gitignore created successfully]${RESET}\n"
+        printf "%s" "$final_content" > .gitignore
+        printf "${GREEN}[✔] .gitignore created successfully.${RESET}\n"
     fi
 }
+# END: Dynamic gitignore builder fix
 
 git_push_auto() {
     if ! check_repo_exists "interactive"; then return; fi
     if ! check_internet; then pause; return; fi
-    printf "\n${YELLOW}[${TOOLNAME}]::[Auto Sync (Add, Commit with Timestamp, Push)]${RESET}\n\n"
+    update_remote_url_with_token
+    printf "\n${YELLOW} [ Auto Sync ]${RESET}\n\n"
     
     local timestamp_msg="AutoSync: $(get_timestamp)"
     
@@ -681,7 +824,7 @@ git_push_auto() {
     set +e
     if git diff --cached --quiet; then
         set -e
-        printf "${YELLOW}[i]::[No changes detected after adding. Skipping commit and push.]${RESET}\n"
+        printf "\n${YELLOW}[!] No changes detected after adding. Skipping commit and push.${RESET}\n"
     else
         set -e
         _git_exec "Auto Commit" commit -m "$timestamp_msg"
@@ -696,7 +839,8 @@ git_push_auto() {
 quick_workflow() {
     if ! check_repo_exists "interactive"; then return; fi
     if ! check_internet; then pause; return; fi
-    printf "\n${YELLOW}[${TOOLNAME}]::[Quick Commit & Push Workflow]${RESET}\n\n"
+    update_remote_url_with_token
+    printf "\n${YELLOW} [ Quick Commit & Push Workflow ]${RESET}\n\n"
     
     _git_exec "Status Check" status
     
@@ -708,7 +852,7 @@ quick_workflow() {
     set +e
     if git diff --cached --quiet; then
         set -e
-        printf "${YELLOW}[i]::[No changes staged for commit after adding. Skipping commit/push.]${RESET}\n"
+        printf "\n${YELLOW}[!] No changes staged for commit after adding. Skipping commit and push.${RESET}\n"
     else
         set -e
         _git_exec "Commit" commit -m "$commit_msg"
@@ -724,6 +868,7 @@ quick_workflow() {
 _git_pull_cli() {
     if ! check_repo_exists "cli"; then return 1; fi
     if ! check_internet; then return 1; fi
+    update_remote_url_with_token
     
     local current_branch
     current_branch=$(git rev-parse --abbrev-ref HEAD)
@@ -731,9 +876,9 @@ _git_pull_cli() {
     
     if [[ "$1" == "rebase" ]]; then
         rebase_flag="--rebase"
-        printf "\n${YELLOW}[${TOOLNAME}]::[CLI Pull %s (using Rebase)]${RESET}\n" "$current_branch"
+        printf "\n${YELLOW}[${TOOLNAME}]::[CLI Pull %s using Rebase]${RESET}\n" "$current_branch"
     else
-        printf "\n${YELLOW}[${TOOLNAME}]::[CLI Pull %s (using Merge)]${RESET}\n" "$current_branch"
+        printf "\n${YELLOW}[${TOOLNAME}]::[CLI Pull %s using Merge.]${RESET}\n" "$current_branch"
     fi
     
     _git_exec "Pull" pull $rebase_flag origin "$current_branch"
@@ -742,6 +887,7 @@ _git_pull_cli() {
 _git_push_cli() {
     if ! check_repo_exists "cli"; then return 1; fi
     if ! check_internet; then return 1; fi
+    update_remote_url_with_token
     
     local current_branch
     current_branch=$(git rev-parse --abbrev-ref HEAD)
@@ -749,23 +895,24 @@ _git_push_cli() {
 
     if [[ "${1:-}" == "--force" || "${1:-}" == "-f" ]]; then
         flags="--force-with-lease"
-        printf "${RED}[!]::[WARNING]: Using --force-with-lease for push.${RESET}\n"
+        printf "${RED}[!] WARNING: Using --force-with-lease for push.${RESET}\n"
     fi
 
-    printf "\n${YELLOW}[${TOOLNAME}]::[CLI Push %s -> origin]${RESET}\n" "$current_branch"
+    printf "\n${YELLOW}[${TOOLNAME}]::[CLI Push %s to origin]${RESET}\n" "$current_branch"
     _git_exec "Push" push $flags origin "$current_branch"
 }
 
 git_pull() {
     if ! check_repo_exists "interactive"; then return; fi
     if ! check_internet; then pause; return; fi
-    printf "\n${YELLOW}[${TOOLNAME}]::[Pull Remote Changes]${RESET}\n"
+    update_remote_url_with_token
+    printf "\n${YELLOW} [ Pull Remote Changes ] ${RESET}\n\n"
     
     local current_branch
     current_branch=$(git rev-parse --abbrev-ref HEAD)
-    printf "${MAGENTA}Current Branch: %s${RESET}\n" "$current_branch"
+    printf "${MAGENTA}[Current Branch]: %s${RESET}\n" "$current_branch"
     
-    printf "${BLUE}[${TOOLNAME}]::[Use '--rebase' instead of 'merge'? (y/N)]: ${RESET} "
+    printf "${BLUE}[${TOOLNAME}]::[Use '--rebase' instead of 'merge'? [y/N]: ${RESET} "
     read -r use_rebase
     
     if [[ "$use_rebase" == "y" || "$use_rebase" == "Y" ]]; then
@@ -779,11 +926,12 @@ git_pull() {
 git_push() {
     if ! check_repo_exists "interactive"; then return; fi
     if ! check_internet; then pause; return; fi
-    printf "\n${YELLOW}[${TOOLNAME}]::[Push Local Commits]${RESET}\n"
+    update_remote_url_with_token
+    printf "\n${YELLOW} [ Push Local Commits ]${RESET}\n\n"
     
     local current_branch
     current_branch=$(git rev-parse --abbrev-ref HEAD)
-    printf "${MAGENTA}Current Branch: %s${RESET}\n" "$current_branch"
+    printf "${MAGENTA}[Current Branch]: %s${RESET}\n" "$current_branch"
     
     printf "${BLUE}[${TOOLNAME}]::[Do you need to force-with-lease? (y/N)]: ${RESET} "
     read -r force_push
@@ -791,7 +939,7 @@ git_push() {
     local push_flags=()
     local exec_name="Push"
     if [[ "$force_push" == "y" || "$force_push" == "Y" ]]; then
-        printf "${RED}!!! DANGEROUS !!! [Using --force-with-lease]${RESET}\n"
+        printf "${RED}[!] DANGEROUS: Using --force-with-lease.${RESET}\n"
         push_flags+=(--force-with-lease)
         exec_name="Force Push"
     fi
@@ -802,8 +950,8 @@ git_push() {
     fi
     
     if [ "$push_succeeded" -eq 0 ] && [[ "$force_push" != "y" && "$force_push" != "Y" ]]; then
-        printf "\n${MAGENTA}Push failed (Likely needs upstream set or non-fast-forward).${RESET}\n"
-        printf "${MAGENTA}Set upstream (e.g., git push --set-upstream origin %s)? (y/N): ${RESET} " "$current_branch"
+        printf "\n${RED}[!] Push failed (Likely needs upstream set or non-fast-forward).${RESET}\n"
+        printf "\n${BLUE}[${TOOLNAME}]::[Set upstream [y/N]: ${RESET} " "$current_branch"
         read -r set_upstream
         if [[ "$set_upstream" == "y" || "$set_upstream" == "Y" ]]; then
             _git_exec "Set Upstream" push --set-upstream origin "$current_branch"
@@ -816,6 +964,7 @@ git_push() {
 remote_config_menu() {
     if ! check_repo_exists "interactive"; then return; fi
     if ! check_internet; then pause; return; fi
+    update_remote_url_with_token
 
     while true; do
         printf "\n${RED}  [ CONFIGURATIONS ]${RESET}\n\n"
@@ -824,8 +973,8 @@ remote_config_menu() {
         current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
         local repo_root
         repo_root=$(get_repo_root)
-        printf "${MAGENTA}  [Current Repo]: %s${RESET}\n" "$repo_root"
-        printf "${MAGENTA}  [Branch  Name]: %s${RESET}\n\n" "$current_branch"
+        printf "\n${GREEN}  [Current Repo]: ${RESER}${MAGENTA}%s${RESET}\n" "$repo_root"
+        printf "${GREEN}  [Branch  Name]: ${RESET}${MAGENTA}%s${RESET}\n\n" "$current_branch"
 
         printf "${YELLOW}  [1] List Remotes${RESET}\n"
         printf "${YELLOW}  [2] Change Remote URL${RESET}\n"
@@ -838,19 +987,16 @@ remote_config_menu() {
 
         case $choice in
             1)
-                local remotes_output
-                set +e
-                remotes_output=$(git remote -v 2>&1)
-                set -e
-                printf "${CYAN}[+]::[Executing]: git remote -v${RESET}\n"
-                _sanitize_url_output "$remotes_output"
+                _git_exec "List Remotes" remote -v
                 ;;
             2)
                 printf "${BLUE}[${TOOLNAME}]::[Remote Name (e.g., origin)]: ${RESET} "
                 read -r remote_name
                 printf "${BLUE}[${TOOLNAME}]::[New URL]: ${RESET} "
                 read -r new_url
-                _git_exec "Set Remote URL" remote set-url "$remote_name" "$new_url"
+                local token_url_new
+                token_url_new=$(echo "$new_url" | sed "s#https://#https://$GITHUB_USERNAME:$GITHUB_TOKEN@#")
+                _git_exec "Set Remote URL" remote set-url "$remote_name" "$token_url_new"
                 ;;
             3)
                 printf "${BLUE}[${TOOLNAME}]::[Remote Name to Remove]: ${RESET} "
@@ -862,11 +1008,13 @@ remote_config_menu() {
                 read -r remote_name
                 printf "${BLUE}[${TOOLNAME}]::[New Remote URL]: ${RESET} "
                 read -r new_url
-                _git_exec "Add Remote" remote add "$remote_name" "$new_url"
+                local token_url_new
+                token_url_new=$(echo "$new_url" | sed "s#https://#https://$GITHUB_USERNAME:$GITHUB_TOKEN@#")
+                _git_exec "Add Remote" remote add "$remote_name" "$token_url_new"
                 ;;
             5) _git_exec "Prune Remote" remote prune origin ;;
             [Xx]) break ;;
-            *) printf "${RED}[!]::[Invalid Option]${RESET}\n" ;;
+            *) printf "${RED}[!] Invalid Option.${RESET}\n" ;;
         esac
         pause
     done
@@ -874,7 +1022,7 @@ remote_config_menu() {
 
 local_menu() {
     while true; do
-        printf "\n${RED}  [ LOCAL SETUP ]${RESET}\n"
+        printf "\n${RED}  [ LOCAL MENU ]${RESET}\n\n"
         
         local current_branch
         set +e
@@ -912,14 +1060,15 @@ local_menu() {
             7) git_stash_menu ;;
             8) git_tag_menu ;;
             [Xx]) break ;;
-            *) printf "\n${RED}[!]::[Invalid Option]${RESET}\n" ;;
+            *) printf "\n${RED}[!] Invalid Option.${RESET}\n" ;;
         esac
     done
 }
 
+# START: Branch menu fix
 branch_menu() {
     while true; do
-        printf "\n${RED}  [ LOCAL SETUP ]${RESET}\n"
+        printf "\n${RED}  [ BRANCH MENU ]${RESET}\n"
         
         local current_branch
         set +e
@@ -934,12 +1083,13 @@ branch_menu() {
         else
            printf "\n${RED}[!] ${RESET}${GREEN}Directory${RESET}${CYAN} %s ${RESET}${RED}is Not a Git Repository${RESET}\n\n" "$PWD"
         fi
-
+        
         printf "${YELLOW}  [1] List All Branches${RESET}\n"
         printf "${YELLOW}  [2] Create & Switch Branch${RESET}\n"
         printf "${YELLOW}  [3] Merge Branch${RESET}\n"
         printf "${YELLOW}  [4] Rebase Branch${RESET}\n"
         printf "${YELLOW}  [5] Delete Local Branch${RESET}\n"
+        printf "${YELLOW}  [6] Switch Branch${RESET}\n" # Added switch option
         printf "\n${RED} [X] Main Menu${RESET}\n\n"
         printf "${BLUE}[${TOOLNAME}]::[SELECT OPTION]:${RESET} "
         read -r choice
@@ -950,11 +1100,13 @@ branch_menu() {
             3) git_branch_merge ;;
             4) git_branch_rebase ;;
             5) git_branch_delete ;;
+            6) git_branch_switch ;; # Call the new switch function
             [Xx]) break ;;
-            *) printf "${RED}[!]::[Invalid Option]${RESET}\n" ;;
+            *) printf "\n${RED}[!] Invalid Option.${RESET}\n" ;;
         esac
     done
 }
+# END: Branch menu fix
 
 user_profile_menu() {
     while true; do
@@ -978,12 +1130,13 @@ user_profile_menu() {
                 cred_status="${YELLOW}File Exists, but Empty/Invalid${RESET}"
             fi
         else
-            cred_status="${RED}File Missing${RESET}"
+            cred_status="${RED}Missing${RESET}"
         fi
+        
 
-        printf "${CYAN}      [GITHUB]${RESET}\n"
-        printf "\n${GREEN}   [USER]: ${RESET}${YELLOW}${git_user:-Not Set}${RESET}"
-        printf "\n${GREEN}   [EMAIL]: ${RESET}${YELLOW}${git_email:-Not Set}${RESET}\n\n"
+        printf "${CYAN}      [ GITHUB ]${RESET}\n"
+        printf "\n${GREEN}    [USER]: ${RESET}${YELLOW}${git_user:-Not Set}${RESET}"
+        printf "\n${GREEN}    [EMAIL]: ${RESET}${YELLOW}${git_email:-Not Set}${RESET}\n\n"
         printf "${MAGENTA}  [Username]: %b\n\n" "$cred_status"
         printf "${YELLOW}  [1] Add GitHub Credentials${RESET}\n"
         printf "${YELLOW}  [2] View GitHub Credentials${RESET}\n"
@@ -997,7 +1150,7 @@ user_profile_menu() {
             2) view_credentials ;;
             3) check_or_get_user_info; pause ;;
             [Xx]) break ;;
-            *) printf "${RED}[!]::[Invalid Option]${RESET}\n" ;;
+            *) printf "\n${RED}[!] Invalid Option.${RESET}\n" ;;
         esac
     done
 }
@@ -1025,7 +1178,7 @@ process_cli_arguments() {
             ;;
         push) _git_push_cli "$arg2" ;;
         pull) _git_pull_cli "$arg2" ;;
-        init) git_initial_setup_and_push ;;
+        init) init_and_push ;;
         clone) clone_repo ;;
         quick) quick_workflow ;;
         log) git_log ;;
@@ -1038,23 +1191,6 @@ process_cli_arguments() {
 
 main_menu() {
     mkdir -p "$CONFIG_DIR" "$LOGS_DIR"
-    
-    if [ "$#" -gt 0 ]; then
-        if [[ "$USER" == "root" ]]; then
-             printf "\n${RED}!!! WARNING !!! Running Laugit with 'sudo' or as root is highly discouraged for Git operations.${RESET}\n"
-             printf "${YELLOW}This causes authentication errors because Git credentials are user-specific. Please run without 'sudo'.${RESET}\n\n"
-             pause
-        fi
-
-        process_cli_arguments "$@"
-        exit 0
-    fi
-    
-    if [[ "$USER" == "root" ]]; then
-        printf "\n${RED}!!! WARNING !!! Running Laugit with 'sudo' or as root is highly discouraged for Git operations.${RESET}\n"
-        printf "${YELLOW}This causes authentication errors because Git credentials are user-specific. Please exit and run without 'sudo'.${RESET}\n\n"
-        pause
-    fi
 
     check_dependencies
     
@@ -1079,10 +1215,10 @@ main_menu() {
         fi
 
         printf "${CYAN}  [ LOCAL SETUP ]${RESET}\n\n"
-        printf "${YELLOW}  [1] Initial Setup & Push${RESET}\n"
-        printf "${YELLOW}  [2] Cloning Repository${RESET}\n"
-        printf "${YELLOW}  [3] Local Operations Menu${RESET}\n"
-        printf "${YELLOW}  [4] Branching Operations${RESET}\n"
+        printf "${YELLOW}  [1] Initial Setup${RESET}\n"
+        printf "${YELLOW}  [2] Cloning Repos${RESET}\n"
+        printf "${YELLOW}  [3] Local   Menu${RESET}\n"
+        printf "${YELLOW}  [4] Branch  Menu${RESET}\n"
         printf "\n${CYAN}  [ WORKFLOWS ]${RESET}\n\n"
         printf "${YELLOW}  [5] Auto Sync${RESET}\n"
         printf "${YELLOW}  [6] Quick Commit${RESET}\n"
@@ -1115,9 +1251,18 @@ main_menu() {
                 printf "${RED}  ║         B Y E       ║${RESET}\n"
                 printf "${RED}  ╚═════════════════════╝${RESET}\n"
                 exit 0 ;;
-            *) printf "${RED}[!]::[Invalid Option]${RESET}\n" ;;
+            *) 
+            printf "\n"
+            printf "${RED}[!] Invalid Option.${RESET}" 
+            printf "\n" ;;
         esac
     done
 }
 
-main_menu "$@"
+# Check for CLI arguments
+if [ "$#" -gt 0 ]; then
+    process_cli_arguments "$@"
+else
+    # Run interactive menu if no arguments are passed
+    main_menu "$@"
+fi
