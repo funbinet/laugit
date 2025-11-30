@@ -23,16 +23,17 @@ pause() {
     fi
 }
 banner() {
-    local NOW
-    NOW=$(get_timestamp)
-    printf "${RED}  ╔═════════════════════════╗${RESET}"
-    printf "\n${RED}  ║${RESET}${GREEN}        L Λ U G I T        ${RESET}${RED}║${RESET}"
-    printf "\n${RED}  ║  Git Terminal Automata  ║${RESET}"
-    printf "\n${RED}  ║     Author: ${RESET}${GREEN}Funbin💀${RESET}${RED}    ║${RESET}"
-    printf "\n${RED}  ╚═════════════════════════╝${RESET}"
-    printf "\n${RED}  [%s]:[EAT]${RESET}\n\n" "$NOW"
+        local NOW
+        NOW=$(get_timestamp)
+        printf "${RED}  ╔═════════════════════════╗${RESET}"
+        printf "\n${RED}  ║${RESET}${GREEN}       L Λ U G I T       ${RESET}${RED}║${RESET}"
+        printf "\n${RED}  ║  Git Terminal Automata  ║${RESET}"
+        printf "\n${RED}  ║     Author: ${RESET}${GREEN}Funbin💀${RESET}${RED}    ║${RESET}"
+        printf "\n${RED}  ╚═════════════════════════╝${RESET}"
+        printf "\n${RED}  [%s]:[EAT]${RESET}\n\n" "$NOW"
 }
 
+clear
 banner
 get_repo_root() {
     if git rev-parse --is-inside-work-tree &>/dev/null; then
@@ -59,8 +60,15 @@ _log() {
     printf "[%s] %s\n" "$(get_timestamp)" "$1" >> "$LOG_FILE"
 }
 
+_sanitize_url_output() {
+    local raw_output="$1"
+    sed -E -e 's#(https://)[^@/]+@#\1***@#g' \
+           -e 's#(git@)[^:]+:#\1***:#g' <<<"$raw_output"
+}
+
 _git_exec() {
     local command_name="$1"; shift
+    
     local cmd_repr
     cmd_repr=$(printf '%q ' "$@")
     
@@ -73,21 +81,16 @@ _git_exec() {
     local status=$?
     set -e
 
-    local sanitized_output
-    sanitized_output=$(sed -E -e 's#(https://)[^@/]+@#\1***@#g' -e 's#(git@)[^:]+:#\1***:#g' <<<"$output")
-
     if [ $status -eq 0 ]; then
         printf "${GREEN}[✔]::[%s] Success.${RESET}\n" "$command_name"
-        if [ -n "$sanitized_output" ]; then
-            printf "${GREEN}--- Command Output ---${RESET}\n"
-            printf "%s\n" "$sanitized_output" | awk -v GREEN="${GREEN}" -v RESET="${RESET}" '{print GREEN "[O] " $0 RESET}'
+        if [ -n "$output" ]; then
+            _sanitize_url_output "$output"
         fi
         _log "SUCCESS: $command_name"
         return 0
     else
         printf "${RED}[✖]::[%s] Failed! Error details below:${RESET}\n" "$command_name"
-        printf "${RED}--- Error Output ---${RESET}\n"
-        printf "%s\n" "$sanitized_output" | awk -v RED="${RED}" -v RESET="${RESET}" '{print RED "[E] " $0 RESET}'
+        _sanitize_url_output "$output" | printf "${RED}%s${RESET}\n" "$(< /dev/stdin)"
         _log "FAIL: $command_name - $output"
         return "$status"
     fi
@@ -170,8 +173,8 @@ check_or_get_user_info() {
         _git_exec "Config Email" config --global user.email "$user_email"
     else
         printf "${RED}      [ U S E R ]${RESET}\n"
-        printf "\n${GREEN}    [USERS]: ${RESET}${YELLOW}$name${RESET}"
-        printf "\n${GREEN}    [EMAIL]: ${RESET}${YELLOW}$email${RESET}\n\n"
+        printf "\n${GREEN}   [USERS]: ${RESET}${YELLOW}$name${RESET}"
+        printf "\n${GREEN}   [EMAIL]: ${RESET}${YELLOW}$email${RESET}\n\n"
     fi
 }
 
@@ -248,35 +251,8 @@ view_credentials() {
     pause
 }
 
-update_remote_url_with_token() {
-    load_credentials
-    if check_repo_exists "cli"; then
-        if [[ -n "$GITHUB_USERNAME" && -n "$GITHUB_TOKEN" ]]; then
-            local current_url
-            set +e
-            current_url=$(git config remote.origin.url 2>/dev/null)
-            set -e
-
-            if [[ -n "$current_url" ]]; then
-                local base_url
-                base_url=$(echo "$current_url" | sed -E 's#^https://[^@/]+@#https://#g' | sed 's#^git@github.com:#https://github.com/#')
-                
-                local token_url
-                token_url=$(echo "$base_url" | sed "s#https://#https://$GITHUB_USERNAME:$GITHUB_TOKEN@#")
-                
-                if ! grep -q "$GITHUB_USERNAME:$GITHUB_TOKEN" <<< "$current_url"; then
-                     printf "\n${CYAN}[i]::[Injecting Credentials into Remote URL]${RESET}\n"
-                    if _git_exec "Set Remote Auth" remote set-url origin "$token_url"; then
-                        printf "${GREEN}[✔]::[Remote URL Updated with PAT.]${RESET}\n"
-                    fi
-                fi
-            fi
-        fi
-    fi
-}
-
 init_and_push() {
-    if ! check_internet; then pause; return; fi
+    if ! check_internet; then pause; return; fi # Added internet check from B
 
     load_credentials
     printf "\n${RED}  [ LOCAL SETUP ]${RESET}\n"
@@ -289,6 +265,7 @@ init_and_push() {
     echo -e "\n${YELLOW}[${TOOLNAME}]::[Create New Repository]${RESET}\n"
     read -rp "$(echo -e ${BLUE}[${TOOLNAME}]::[Enter path to your Repo]:${RESET} )" folder
     
+    # Check if folder is empty
     if [[ -z "$folder" ]]; then
         echo -e "\n${RED}[!] Repo path cannot be empty${RESET}\n"
         pause
@@ -303,11 +280,12 @@ init_and_push() {
     fi
 
     echo -e "\n${GREEN}[+]::[Initializing Repo]${RESET}\n"
-    _git_exec "Init" init
-    _git_exec "Add All" add .
+    git init &>/dev/null
+    git add . &>/dev/null
 
     read -rp "$(echo -e ${BLUE}[${TOOLNAME}]::[Enter Commit Description]:${RESET} )" commit_msg
-    _git_exec "Commit" commit -m "${commit_msg:-Initial commit via script}"
+    # Use a default message if commit_msg is empty
+    git commit -m "${commit_msg:-Initial commit via script}" &>/dev/null
 
     echo -e "\n${CYAN}[Instructions]${RESET}\n"
     echo -e "${YELLOW}1. Go to https://github.com/new and create a new repository.${RESET}"
@@ -315,23 +293,29 @@ init_and_push() {
 
     read -rp "$(echo -e ${BLUE}[${TOOLNAME}]::[Paste Repo Link]:${RESET} )" remote_url
     
+    # Simple validation for remote_url
     if [[ -z "$remote_url" ]]; then
         echo -e "${RED}[!]::[Repo link cannot be empty.]${RESET}\n"
         pause
         return
     fi
 
+    # Injecting credentials directly into the URL (Code A's working method)
     token_url=$(echo "$remote_url" | sed "s#https://#https://$GITHUB_USERNAME:$GITHUB_TOKEN@#")
 
     echo -e "\n${YELLOW}[+]::[Configuring Remote + Pushing]${RESET}"
     
-    _git_exec "Branch Main" branch -M main
-    _git_exec "Add Origin" remote add origin "$token_url"
+    # These commands are run silently to prevent output interference
+    git branch -M main &>/dev/null
+    git remote add origin "$token_url" &>/dev/null
     
-    _git_exec "Pull Rebase (Initial)" pull origin main --rebase || true
+    # Attempt to pull/rebase, ignore if fails (typical for first push to empty repo)
+    git pull origin main --rebase &>/dev/null || true 
     
-    _git_exec "Push Force" push -u origin main --force
+    # Force push to ensure local content overwrites any initial files (like README)
+    git push -u origin main --force &>/dev/null 
 
+    # Check the exit status of the push command
     if [ $? -eq 0 ]; then
         echo -e "\n${GREEN}[✔]::[Repository Created & Pushed Successfully]${RESET}\n"
     else
@@ -586,50 +570,43 @@ git_stash_menu() {
 
 git_tag_menu() {
     if ! check_repo_exists "interactive"; then return; fi
+    printf "\n${YELLOW}[${TOOLNAME}]::[Tag Management]${RESET}\n\n"
+    printf "${CYAN}[1] List Tags${RESET}\n"
+    printf "${CYAN}[2] Create Tag${RESET}\n"
+    printf "${CYAN}[3] Delete Local Tag${RESET}\n"
+    printf "${CYAN}[4] Push Tag to Remote${RESET}\n"
+    printf "${BLUE}[${TOOLNAME}]::[Select Tag Action]: ${RESET} "
+    read -r tag_choice
     
-    while true; do
-        printf "\n${YELLOW}[${TOOLNAME}]::[Tag Management]${RESET}\n\n"
-        printf "${CYAN}[1] List Tags${RESET}\n"
-        printf "${CYAN}[2] Create Tag${RESET}\n"
-        printf "${CYAN}[3] Delete Local Tag${RESET}\n"
-        printf "${CYAN}[4] Push Tag to Remote${RESET}\n"
-        printf "\n${RED} [X] Back to Local Menu${RESET}\n\n"
-        printf "${BLUE}[${TOOLNAME}]::[Select Tag Action]: ${RESET} "
-        read -r tag_choice
-        
-        case $tag_choice in
-            1)
-                if ! check_internet; then pause; return; fi
-                update_remote_url_with_token
-                _git_exec "List Tags" tag -l
-                _git_exec "List Remote Tags" ls-remote --tags origin
-                ;;
-            2)
-                printf "${BLUE}[${TOOLNAME}]::[Tag Name (e.g., v1.0.0)]: ${RESET} "
-                read -r tag_name
-                printf "${BLUE}[${TOOLNAME}]::[Tag Message]: ${RESET} "
-                read -r tag_msg
-                _git_exec "Create Tag" tag -a "$tag_name" -m "$tag_msg"
-                ;;
-            3)
-                _git_exec "List Tags" tag -l
-                printf "${BLUE}[${TOOLNAME}]::[Tag Name to Delete Locally]: ${RESET} "
-                read -r tag_name
-                _git_exec "Delete Local Tag" tag -d "$tag_name"
-                ;;
-            4)
-                if ! check_internet; then pause; return; fi
-                update_remote_url_with_token
-                _git_exec "List Tags" tag -l
-                printf "${BLUE}[${TOOLNAME}]::[Tag Name to Push]: ${RESET} "
-                read -r tag_name
-                _git_exec "Push Tag" push origin "$tag_name"
-                ;;
-            [Xx]) break ;;
-            *) printf "${RED}[!]::[Invalid selection.]${RESET}\n" ;;
-        esac
-        pause
-    done
+    case $tag_choice in
+        1)
+            if ! check_internet; then pause; return; fi
+            _git_exec "List Tags" tag -l
+            _git_exec "List Remote Tags" ls-remote --tags origin
+            ;;
+        2)
+            printf "${BLUE}[${TOOLNAME}]::[Tag Name (e.g., v1.0.0)]: ${RESET} "
+            read -r tag_name
+            printf "${BLUE}[${TOOLNAME}]::[Tag Message]: ${RESET} "
+            read -r tag_msg
+            _git_exec "Create Tag" tag -a "$tag_name" -m "$tag_msg"
+            ;;
+        3)
+            _git_exec "List Tags" tag -l
+            printf "${BLUE}[${TOOLNAME}]::[Tag Name to Delete Locally]: ${RESET} "
+            read -r tag_name
+            _git_exec "Delete Local Tag" tag -d "$tag_name"
+            ;;
+        4)
+            if ! check_internet; then pause; return; fi
+            _git_exec "List Tags" tag -l
+            printf "${BLUE}[${TOOLNAME}]::[Tag Name to Push]: ${RESET} "
+            read -r tag_name
+            _git_exec "Push Tag" push origin "$tag_name"
+            ;;
+        *) printf "${RED}[!]::[Invalid selection.]${RESET}\n" ;;
+    esac
+    pause
 }
 
 _build_gitignore() {
@@ -695,7 +672,6 @@ _build_gitignore() {
 git_push_auto() {
     if ! check_repo_exists "interactive"; then return; fi
     if ! check_internet; then pause; return; fi
-    update_remote_url_with_token
     printf "\n${YELLOW}[${TOOLNAME}]::[Auto Sync (Add, Commit with Timestamp, Push)]${RESET}\n\n"
     
     local timestamp_msg="AutoSync: $(get_timestamp)"
@@ -720,7 +696,6 @@ git_push_auto() {
 quick_workflow() {
     if ! check_repo_exists "interactive"; then return; fi
     if ! check_internet; then pause; return; fi
-    update_remote_url_with_token
     printf "\n${YELLOW}[${TOOLNAME}]::[Quick Commit & Push Workflow]${RESET}\n\n"
     
     _git_exec "Status Check" status
@@ -749,7 +724,6 @@ quick_workflow() {
 _git_pull_cli() {
     if ! check_repo_exists "cli"; then return 1; fi
     if ! check_internet; then return 1; fi
-    update_remote_url_with_token
     
     local current_branch
     current_branch=$(git rev-parse --abbrev-ref HEAD)
@@ -768,7 +742,6 @@ _git_pull_cli() {
 _git_push_cli() {
     if ! check_repo_exists "cli"; then return 1; fi
     if ! check_internet; then return 1; fi
-    update_remote_url_with_token
     
     local current_branch
     current_branch=$(git rev-parse --abbrev-ref HEAD)
@@ -786,7 +759,6 @@ _git_push_cli() {
 git_pull() {
     if ! check_repo_exists "interactive"; then return; fi
     if ! check_internet; then pause; return; fi
-    update_remote_url_with_token
     printf "\n${YELLOW}[${TOOLNAME}]::[Pull Remote Changes]${RESET}\n"
     
     local current_branch
@@ -807,7 +779,6 @@ git_pull() {
 git_push() {
     if ! check_repo_exists "interactive"; then return; fi
     if ! check_internet; then pause; return; fi
-    update_remote_url_with_token
     printf "\n${YELLOW}[${TOOLNAME}]::[Push Local Commits]${RESET}\n"
     
     local current_branch
@@ -845,7 +816,6 @@ git_push() {
 remote_config_menu() {
     if ! check_repo_exists "interactive"; then return; fi
     if ! check_internet; then pause; return; fi
-    update_remote_url_with_token
 
     while true; do
         printf "\n${RED}  [ CONFIGURATIONS ]${RESET}\n\n"
@@ -868,16 +838,19 @@ remote_config_menu() {
 
         case $choice in
             1)
-                _git_exec "List Remotes" remote -v
+                local remotes_output
+                set +e
+                remotes_output=$(git remote -v 2>&1)
+                set -e
+                printf "${CYAN}[+]::[Executing]: git remote -v${RESET}\n"
+                _sanitize_url_output "$remotes_output"
                 ;;
             2)
                 printf "${BLUE}[${TOOLNAME}]::[Remote Name (e.g., origin)]: ${RESET} "
                 read -r remote_name
                 printf "${BLUE}[${TOOLNAME}]::[New URL]: ${RESET} "
                 read -r new_url
-                local token_url_new
-                token_url_new=$(echo "$new_url" | sed "s#https://#https://$GITHUB_USERNAME:$GITHUB_TOKEN@#")
-                _git_exec "Set Remote URL" remote set-url "$remote_name" "$token_url_new"
+                _git_exec "Set Remote URL" remote set-url "$remote_name" "$new_url"
                 ;;
             3)
                 printf "${BLUE}[${TOOLNAME}]::[Remote Name to Remove]: ${RESET} "
@@ -889,9 +862,7 @@ remote_config_menu() {
                 read -r remote_name
                 printf "${BLUE}[${TOOLNAME}]::[New Remote URL]: ${RESET} "
                 read -r new_url
-                local token_url_new
-                token_url_new=$(echo "$new_url" | sed "s#https://#https://$GITHUB_USERNAME:$GITHUB_TOKEN@#")
-                _git_exec "Add Remote" remote add "$remote_name" "$token_url_new"
+                _git_exec "Add Remote" remote add "$remote_name" "$new_url"
                 ;;
             5) _git_exec "Prune Remote" remote prune origin ;;
             [Xx]) break ;;
@@ -1010,9 +981,9 @@ user_profile_menu() {
             cred_status="${RED}File Missing${RESET}"
         fi
 
-        printf "${CYAN}      [ GITHUB ]${RESET}\n"
-        printf "\n${GREEN}    [USER]: ${RESET}${YELLOW}${git_user:-Not Set}${RESET}"
-        printf "\n${GREEN}    [EMAIL]: ${RESET}${YELLOW}${git_email:-Not Set}${RESET}\n\n"
+        printf "${CYAN}      [GITHUB]${RESET}\n"
+        printf "\n${GREEN}   [USER]: ${RESET}${YELLOW}${git_user:-Not Set}${RESET}"
+        printf "\n${GREEN}   [EMAIL]: ${RESET}${YELLOW}${git_email:-Not Set}${RESET}\n\n"
         printf "${MAGENTA}  [Username]: %b\n\n" "$cred_status"
         printf "${YELLOW}  [1] Add GitHub Credentials${RESET}\n"
         printf "${YELLOW}  [2] View GitHub Credentials${RESET}\n"
@@ -1054,7 +1025,7 @@ process_cli_arguments() {
             ;;
         push) _git_push_cli "$arg2" ;;
         pull) _git_pull_cli "$arg2" ;;
-        init) init_and_push ;;
+        init) git_initial_setup_and_push ;;
         clone) clone_repo ;;
         quick) quick_workflow ;;
         log) git_log ;;
@@ -1141,7 +1112,7 @@ main_menu() {
                 printf "\n${RED}  ╔═════════════════════╗${RESET}\n"
                 printf "${RED}  ║     L A U G I T     ║${RESET}\n"
                 printf "${CYAN}  ║ %s ║${RESET}\n" "$NOW"
-                printf "${RED}  ║        B Y E        ║${RESET}\n"
+                printf "${RED}  ║         B Y E       ║${RESET}\n"
                 printf "${RED}  ╚═════════════════════╝${RESET}\n"
                 exit 0 ;;
             *) printf "${RED}[!]::[Invalid Option]${RESET}\n" ;;
